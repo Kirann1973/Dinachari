@@ -20,8 +20,10 @@ class Habits extends Table {
   /// Unused since schema 2 (replaced by [iconKey]); kept so old data loads.
   TextColumn get emoji => text().withDefault(const Constant('✅'))();
 
-  /// Key into `habitIcons` (lib/domain/habit_style.dart).
-  TextColumn get iconKey => text().withDefault(const Constant('check'))();
+  /// The habit's look, e.g. `emoji:🛁` or `icon:bathtub`
+  /// (see lib/domain/habit_look.dart).
+  TextColumn get iconKey =>
+      text().withDefault(const Constant('icon:check_circle'))();
 
   /// ARGB color of the habit.
   IntColumn get color => integer().withDefault(const Constant(0xFFF97316))();

@@ -40,6 +40,8 @@ dependencies:
   path_provider: ^2.1.6
   home_widget: ^0.10.0
   intl: ^0.20.3
+  emoji_picker_flutter: ^4.5.4
+  image_picker: ^1.2.4
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -60,6 +62,9 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/icons.json
+
   fonts:
     - family: Inter
       fonts:
@@ -71,6 +76,9 @@ flutter:
           weight: 600
         - asset: assets/fonts/Inter-700.ttf
           weight: 700
+    - family: MaterialSymbolsRounded
+      fonts:
+        - asset: assets/fonts/MaterialSymbolsRounded.ttf
     - family: SpaceGrotesk
       fonts:
         - asset: assets/fonts/SpaceGrotesk-500.ttf

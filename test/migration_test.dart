@@ -31,7 +31,7 @@ void main() {
     final repo = HabitRepository(db);
     final h = (await repo.watchHabits().first).single;
     expect(h.habit.name, 'Read');
-    expect(h.habit.iconKey, 'check');
+    expect(h.habit.iconKey, 'icon:check_circle');
     expect(h.habit.kind, HabitKind.check);
     expect(h.target, 1);
     expect(h.completedDays, {'2026-10-30'});

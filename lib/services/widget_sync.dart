@@ -7,7 +7,7 @@ import 'package:home_widget/home_widget.dart';
 
 import '../data/habit_repository.dart';
 import '../domain/day.dart';
-import '../domain/habit_style.dart';
+import '../ui/habit_look_view.dart';
 
 /// Keeps the home-screen widgets and the app in step.
 ///
@@ -34,8 +34,19 @@ class WidgetSync {
   }
 
   /// Prefs key under which the PNG for this icon + color is stored.
-  static String iconImageKey(String iconKey, int color) =>
-      'icon_${iconKey}_${color.toRadixString(16)}';
+  /// Any look (emoji, photo…) can be in [look], so it is hashed into a
+  /// stable, file-name-safe key.
+  static String iconImageKey(String look, int color) =>
+      'look_${_fnv(look).toRadixString(16)}_${color.toRadixString(16)}';
+
+  /// FNV-1a: stable across app runs, unlike String.hashCode.
+  static int _fnv(String s) {
+    var h = 0x811c9dc5;
+    for (final c in s.codeUnits) {
+      h = ((h ^ c) * 0x01000193) & 0xffffffff;
+    }
+    return h;
+  }
 
   /// Builds the JSON payload the native widgets render.
   static String buildPayload(List<HabitWithStatus> habits, {DateTime? now}) {
@@ -58,7 +69,7 @@ class WidgetSync {
     });
   }
 
-  /// Draws each habit's icon to a small PNG the native widget can show.
+  /// Draws each habit's look (emoji, icon, photo, text) to a small PNG the native widget can show.
   static Future<void> _renderIcons(List<HabitWithStatus> habits) async {
     for (final h in habits) {
       final key = iconImageKey(h.habit.iconKey, h.habit.color);
@@ -66,10 +77,13 @@ class WidgetSync {
       final existing = await HomeWidget.getWidgetData<String>(key);
       if (existing == null) {
         await HomeWidget.renderFlutterWidget(
-          Icon(
-            habitIcon(h.habit.iconKey),
-            color: Color(h.habit.color),
-            size: 40,
+          Directionality(
+            textDirection: TextDirection.ltr,
+            child: HabitLookView(
+              look: h.habit.iconKey,
+              color: Color(h.habit.color),
+              size: 40,
+            ),
           ),
           key: key,
           logicalSize: const Size(40, 40),

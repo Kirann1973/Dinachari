@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app.dart';
 import '../data/database.dart';
+import '../domain/habit_look.dart';
 import '../domain/habit_style.dart';
 import '../providers.dart';
 import 'common.dart';
+import 'look_picker.dart';
 
 /// Opens the full-screen editor to add a habit, or edit [existing].
 Future<void> openHabitEditor(BuildContext context, {Habit? existing}) {
@@ -29,7 +31,7 @@ class HabitEditorScreen extends ConsumerStatefulWidget {
 class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
   late final _name = TextEditingController(text: widget.existing?.name ?? '');
   late final _unit = TextEditingController(text: widget.existing?.unit ?? '');
-  late String _iconKey = widget.existing?.iconKey ?? 'check';
+  late String _iconKey = widget.existing?.iconKey ?? 'icon:check_circle';
   late int _color = widget.existing?.color ?? habitColors.first.toARGB32();
   late HabitKind _kind = widget.existing?.kind ?? HabitKind.check;
   late int _target = widget.existing?.target ?? 8;
@@ -43,7 +45,7 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
     if (_kind == HabitKind.check) _target = 8;
     _name.addListener(() {
       setState(() {
-        if (!_iconPicked) _iconKey = suggestIconKey(_name.text);
+        if (!_iconPicked) _iconKey = suggestLook(_name.text);
       });
     });
   }
@@ -216,25 +218,17 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
           const SizedBox(height: 16),
           WhiteCard(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const _Label('Icon'),
+                const _Label('Look'),
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final key in habitIcons.keys)
-                      _IconOption(
-                        iconKey: key,
-                        color: color,
-                        selected: key == _iconKey,
-                        onTap: () => setState(() {
-                          _iconKey = key;
-                          _iconPicked = true;
-                        }),
-                      ),
-                  ],
+                LookPicker(
+                  look: _iconKey,
+                  color: color,
+                  onChanged: (look) => setState(() {
+                    _iconKey = look;
+                    _iconPicked = true;
+                  }),
                 ),
               ],
             ),
@@ -314,47 +308,6 @@ class _Label extends StatelessWidget {
       color: DC.ink,
     ),
   );
-}
-
-class _IconOption extends StatelessWidget {
-  const _IconOption({
-    required this.iconKey,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String iconKey;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: '$iconKey icon',
-      excludeSemantics: true,
-      child: InkResponse(
-        onTap: onTap,
-        radius: 26,
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: selected ? deepOf(color) : DC.soft,
-          ),
-          child: Icon(
-            habitIcon(iconKey),
-            size: 22,
-            color: selected ? Colors.white : DC.muted,
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ColorOption extends StatelessWidget {

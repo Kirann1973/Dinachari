@@ -53,7 +53,7 @@ void main() {
       {
         'id': 1,
         'name': 'Gym',
-        'icon': 'icon_gym_fff97316',
+        'icon': WidgetSync.iconImageKey('gym', 0xFFF97316),
         'color': 0xFFF97316,
         'kind': 'check',
         'target': 1,
@@ -64,7 +64,7 @@ void main() {
       {
         'id': 2,
         'name': 'Water',
-        'icon': 'icon_gym_fff97316',
+        'icon': WidgetSync.iconImageKey('gym', 0xFFF97316),
         'color': 0xFFF97316,
         'kind': 'count',
         'target': 8,

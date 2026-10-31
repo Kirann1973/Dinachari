@@ -54,7 +54,7 @@ class $HabitsTable extends Habits with TableInfo<$HabitsTable, Habit> {
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('check'),
+    defaultValue: const Constant('icon:check_circle'),
   );
   static const VerificationMeta _colorMeta = const VerificationMeta('color');
   @override
@@ -294,7 +294,8 @@ class Habit extends DataClass implements Insertable<Habit> {
   /// Unused since schema 2 (replaced by [iconKey]); kept so old data loads.
   final String emoji;
 
-  /// Key into `habitIcons` (lib/domain/habit_style.dart).
+  /// The habit's look, e.g. `emoji:🛁` or `icon:bathtub`
+  /// (see lib/domain/habit_look.dart).
   final String iconKey;
 
   /// ARGB color of the habit.

@@ -99,7 +99,7 @@ class HabitRepository {
 
   Future<int> addHabit({
     required String name,
-    String iconKey = 'check',
+    String iconKey = 'icon:check_circle',
     int color = 0xFFF97316,
     HabitKind kind = HabitKind.check,
     int target = 1,

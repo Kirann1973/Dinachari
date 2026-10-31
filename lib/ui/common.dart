@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../app.dart';
 import '../data/habit_repository.dart';
 import '../domain/day.dart';
-import '../domain/habit_style.dart';
+import 'habit_look_view.dart';
 
 /// The white rounded card used everywhere.
 class WhiteCard extends StatelessWidget {
@@ -34,7 +34,7 @@ class WhiteCard extends StatelessWidget {
   }
 }
 
-/// A habit's icon in a tinted circle.
+/// A habit's look (emoji, icon, photo or text) in a tinted circle.
 class HabitIconChip extends StatelessWidget {
   const HabitIconChip({
     super.key,
@@ -50,21 +50,8 @@ class HabitIconChip extends StatelessWidget {
   final bool filled;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: filled ? deepOf(color) : tintOf(color),
-      ),
-      child: Icon(
-        habitIcon(iconKey),
-        size: size * 0.55,
-        color: filled ? Colors.white : deepOf(color),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      HabitLookView(look: iconKey, color: color, size: size, filled: filled);
 }
 
 /// Big Space Grotesk number with a small caption under it.
