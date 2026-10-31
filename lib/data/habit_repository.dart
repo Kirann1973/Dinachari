@@ -66,10 +66,13 @@ class HabitRepository {
 
   Future<int> addHabit({required String name, String emoji = '✅'}) async {
     final maxOrder = _db.habits.sortOrder.max();
-    final row = await (_db.selectOnly(_db.habits)..addColumns([maxOrder]))
-        .getSingle();
+    final row = await (_db.selectOnly(
+      _db.habits,
+    )..addColumns([maxOrder])).getSingle();
     final next = (row.read(maxOrder) ?? -1) + 1;
-    return _db.into(_db.habits).insert(
+    return _db
+        .into(_db.habits)
+        .insert(
           HabitsCompanion.insert(
             name: name.trim(),
             emoji: Value(emoji),
@@ -88,8 +91,9 @@ class HabitRepository {
   }
 
   Future<void> archiveHabit(int id) {
-    return (_db.update(_db.habits)..where((h) => h.id.equals(id)))
-        .write(const HabitsCompanion(archived: Value(true)));
+    return (_db.update(_db.habits)..where((h) => h.id.equals(id))).write(
+      const HabitsCompanion(archived: Value(true)),
+    );
   }
 
   Future<void> deleteHabit(int id) {
@@ -100,21 +104,24 @@ class HabitRepository {
   Future<void> setDone(int habitId, bool done, {DateTime? day}) async {
     final key = dayKey(day ?? DateTime.now());
     if (done) {
-      await _db.into(_db.completions).insertOnConflictUpdate(
+      await _db
+          .into(_db.completions)
+          .insertOnConflictUpdate(
             CompletionsCompanion.insert(habitId: habitId, day: key),
           );
     } else {
-      await (_db.delete(_db.completions)
-            ..where((c) => c.habitId.equals(habitId) & c.day.equals(key)))
-          .go();
+      await (_db.delete(
+        _db.completions,
+      )..where((c) => c.habitId.equals(habitId) & c.day.equals(key))).go();
     }
   }
 
   Future<void> toggleToday(int habitId) async {
     final key = dayKey(DateTime.now());
-    final existing = await (_db.select(_db.completions)
-          ..where((c) => c.habitId.equals(habitId) & c.day.equals(key)))
-        .getSingleOrNull();
+    final existing =
+        await (_db.select(_db.completions)
+              ..where((c) => c.habitId.equals(habitId) & c.day.equals(key)))
+            .getSingleOrNull();
     await setDone(habitId, existing == null);
   }
 }

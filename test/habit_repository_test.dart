@@ -45,8 +45,10 @@ void main() {
   test('new habits go to the end, archived ones are hidden', () async {
     final a = await repo.addHabit(name: 'A');
     await repo.addHabit(name: 'B');
-    expect((await repo.watchHabits().first).map((h) => h.habit.name),
-        ['A', 'B']);
+    expect((await repo.watchHabits().first).map((h) => h.habit.name), [
+      'A',
+      'B',
+    ]);
     await repo.archiveHabit(a);
     expect((await repo.watchHabits().first).map((h) => h.habit.name), ['B']);
   });

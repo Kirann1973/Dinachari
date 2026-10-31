@@ -1,5 +1,7 @@
 plugins {
     id("com.android.application")
+    // Compose compiler, needed for the Jetpack Glance home-screen widget.
+    id("org.jetbrains.kotlin.plugin.compose")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -29,6 +31,10 @@ android {
         versionName = flutter.versionName
     }
 
+    buildFeatures {
+        compose = true
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -46,4 +52,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("androidx.glance:glance-appwidget:1.2.0")
 }

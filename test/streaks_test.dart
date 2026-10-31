@@ -4,8 +4,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   final today = DateTime(2026, 3, 10);
-  Set<String> days(List<int> offsets) =>
-      {for (final o in offsets) dayKey(daysBefore(today, o))};
+  Set<String> days(List<int> offsets) => {
+    for (final o in offsets) dayKey(daysBefore(today, o)),
+  };
 
   test('no completions means zero streaks', () {
     final s = computeStreaks({}, today: today);
@@ -35,10 +36,11 @@ void main() {
   });
 
   test('works across month boundaries', () {
-    final s = computeStreaks(
-      {'2026-02-27', '2026-02-28', '2026-03-01'},
-      today: DateTime(2026, 3, 1),
-    );
+    final s = computeStreaks({
+      '2026-02-27',
+      '2026-02-28',
+      '2026-03-01',
+    }, today: DateTime(2026, 3, 1));
     expect(s.current, 3);
   });
 

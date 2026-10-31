@@ -5,7 +5,18 @@ import '../data/database.dart';
 import '../providers.dart';
 
 const _emojiChoices = [
-  '✅', '💧', '🏃', '📖', '🧘', '🥗', '😴', '✍️', '🎸', '🧹', '💊', '🙏',
+  '✅',
+  '💧',
+  '🏃',
+  '📖',
+  '🧘',
+  '🥗',
+  '😴',
+  '✍️',
+  '🎸',
+  '🧹',
+  '💊',
+  '🙏',
 ];
 
 /// Opens a bottom sheet to add a habit, or edit [existing] if given.
@@ -28,8 +39,9 @@ class _HabitEditor extends ConsumerStatefulWidget {
 }
 
 class _HabitEditorState extends ConsumerState<_HabitEditor> {
-  late final TextEditingController _name =
-      TextEditingController(text: widget.existing?.name ?? '');
+  late final TextEditingController _name = TextEditingController(
+    text: widget.existing?.name ?? '',
+  );
   late String _emoji = widget.existing?.emoji ?? _emojiChoices.first;
 
   @override

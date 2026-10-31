@@ -26,15 +26,23 @@ class Completions extends Table {
 @DriftDatabase(tables: [Habits, Completions])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
-      : super(executor ?? driftDatabase(name: 'dinachari'));
+    : super(
+        executor ??
+            driftDatabase(
+              name: 'dinachari',
+              // The home-screen widget runs Dart in a background isolate;
+              // sharing the connection keeps both sides in sync.
+              native: const DriftNativeOptions(shareAcrossIsolates: true),
+            ),
+      );
 
   @override
   int get schemaVersion => 1;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-        beforeOpen: (details) async {
-          await customStatement('PRAGMA foreign_keys = ON');
-        },
-      );
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+    },
+  );
 }

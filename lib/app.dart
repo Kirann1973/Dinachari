@@ -17,13 +17,14 @@ class DinachariApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: DinachariColors.accent,
-      brightness: Brightness.dark,
-    ).copyWith(
-      primary: DinachariColors.accent,
-      surface: DinachariColors.background,
-    );
+    final scheme =
+        ColorScheme.fromSeed(
+          seedColor: DinachariColors.accent,
+          brightness: Brightness.dark,
+        ).copyWith(
+          primary: DinachariColors.accent,
+          surface: DinachariColors.background,
+        );
 
     return MaterialApp(
       title: 'Dinachari',

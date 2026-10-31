@@ -45,13 +45,13 @@ class _TodayScreenState extends ConsumerState<TodayScreen>
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Dinachari',
-                style: TextStyle(fontWeight: FontWeight.w700)),
+            const Text(
+              'Dinachari',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
             Text(
               DateFormat('EEEE, d MMMM').format(DateTime.now()),
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
+              style: Theme.of(context).textTheme.bodySmall
                   ?.copyWith(color: Colors.white60),
             ),
           ],
@@ -104,8 +104,10 @@ class _ProgressHeader extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Today',
-                    style: TextStyle(color: DinachariColors.mutedOnCard)),
+                const Text(
+                  'Today',
+                  style: TextStyle(color: DinachariColors.mutedOnCard),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   '$done of $total done',
@@ -147,8 +149,7 @@ class _HabitCard extends ConsumerWidget {
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () =>
-            ref.read(habitRepositoryProvider).toggleToday(habit.id),
+        onTap: () => ref.read(habitRepositoryProvider).toggleToday(habit.id),
         onLongPress: () => Navigator.of(context).push(
           MaterialPageRoute(
             builder: (_) => HabitDetailScreen(habitId: habit.id),

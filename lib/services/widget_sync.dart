@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:home_widget/home_widget.dart';
 
 import '../data/habit_repository.dart';
+import '../domain/day.dart';
 
 /// Pushes today's habit summary to the home-screen widgets.
 ///
@@ -12,7 +13,8 @@ import '../data/habit_repository.dart';
 /// read the `today_json` key. Windows uses a tray app instead and is skipped.
 class WidgetSync {
   static const appGroupId = 'group.com.kiran.dinachari';
-  static const androidWidget = 'DinachariWidgetReceiver';
+  static const androidWidget =
+      'com.kiran.dinachari.widget.DinachariWidgetReceiver';
   static const iosWidget = 'DinachariWidget';
   static const dataKey = 'today_json';
 
@@ -24,10 +26,23 @@ class WidgetSync {
     await HomeWidget.setAppGroupId(appGroupId);
   }
 
+  /// Lets taps on the widget (tick a habit) run [callback] in Dart.
+  static Future<void> registerInteraction(
+    Future<void> Function(Uri?) callback,
+  ) async {
+    // Only the Android widget has tap-to-tick so far.
+    if (kIsWeb || !Platform.isAndroid) return;
+    await HomeWidget.registerInteractivityCallback(callback);
+  }
+
   /// Builds the JSON payload the native widgets render.
-  static String buildPayload(List<HabitWithStatus> habits) {
+  ///
+  /// `day` lets the widget notice when the data is from an earlier day (for
+  /// example after midnight, before the app runs again) and show it unticked.
+  static String buildPayload(List<HabitWithStatus> habits, {DateTime? now}) {
     final done = habits.where((h) => h.doneToday).length;
     return jsonEncode({
+      'day': dayKey(now ?? DateTime.now()),
       'done': done,
       'total': habits.length,
       'habits': [
@@ -48,7 +63,7 @@ class WidgetSync {
     try {
       await HomeWidget.saveWidgetData<String>(dataKey, buildPayload(habits));
       await HomeWidget.updateWidget(
-        androidName: androidWidget,
+        qualifiedAndroidName: androidWidget,
         iOSName: iosWidget,
       );
     } catch (e) {

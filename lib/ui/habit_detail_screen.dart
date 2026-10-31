@@ -77,8 +77,10 @@ class HabitDetailScreen extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 20),
-          Text('Last $_weeks weeks',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Last $_weeks weeks',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: 12),
           _HistoryGrid(item: item, weeks: _weeks),
         ],
@@ -142,8 +144,10 @@ class _HistoryGrid extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = 4.0;
-        final size = ((constraints.maxWidth - gap * (weeks - 1)) / weeks)
-            .clamp(8.0, 28.0);
+        final size = ((constraints.maxWidth - gap * (weeks - 1)) / weeks).clamp(
+          8.0,
+          28.0,
+        );
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -154,12 +158,22 @@ class _HistoryGrid extends ConsumerWidget {
                     Padding(
                       padding: const EdgeInsets.only(bottom: gap),
                       child: _DayCell(
-                        day: DateTime(start.year, start.month,
-                            start.day + w * 7 + d),
+                        day: DateTime(
+                          start.year,
+                          start.month,
+                          start.day + w * 7 + d,
+                        ),
                         today: today,
                         size: size,
-                        done: item.completedDays.contains(dayKey(DateTime(
-                            start.year, start.month, start.day + w * 7 + d))),
+                        done: item.completedDays.contains(
+                          dayKey(
+                            DateTime(
+                              start.year,
+                              start.month,
+                              start.day + w * 7 + d,
+                            ),
+                          ),
+                        ),
                         onTap: (day, done) => ref
                             .read(habitRepositoryProvider)
                             .setDone(item.habit.id, !done, day: day),
@@ -201,8 +215,8 @@ class _DayCell extends StatelessWidget {
           color: future
               ? Colors.transparent
               : done
-                  ? DinachariColors.accent
-                  : const Color(0xFF2A2A2A),
+              ? DinachariColors.accent
+              : const Color(0xFF2A2A2A),
           borderRadius: BorderRadius.circular(4),
           border: day == today
               ? Border.all(color: Colors.white, width: 1.5)
