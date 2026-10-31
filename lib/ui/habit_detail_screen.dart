@@ -4,17 +4,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app.dart';
 import '../data/habit_repository.dart';
 import '../domain/day.dart';
+import '../domain/habit_style.dart';
 import '../providers.dart';
+import 'common.dart';
 import 'habit_editor.dart';
 
-/// Streaks and the last 12 weeks of history for one habit.
-/// Tap a past day to fix a missed check-in.
+/// Streaks, today's progress and 15 weeks of history for one habit.
 class HabitDetailScreen extends ConsumerWidget {
   const HabitDetailScreen({super.key, required this.habitId});
 
   final int habitId;
-
-  static const _weeks = 12;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -24,22 +23,29 @@ class HabitDetailScreen extends ConsumerWidget {
       return const Scaffold(body: Center(child: Text('Habit not found')));
     }
     final item = matches.first;
+    final habit = item.habit;
+    final color = Color(habit.color);
+    final repo = ref.read(habitRepositoryProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${item.habit.emoji}  ${item.habit.name}'),
         actions: [
           IconButton(
-            tooltip: 'Edit',
+            tooltip: 'Edit habit',
             icon: const Icon(Icons.edit_outlined),
-            onPressed: () => showHabitEditor(context, existing: item.habit),
+            onPressed: () => openHabitEditor(context, existing: habit),
           ),
           PopupMenuButton<String>(
+            tooltip: 'More',
             onSelected: (value) async {
-              final repo = ref.read(habitRepositoryProvider);
               final nav = Navigator.of(context);
               if (value == 'archive') await repo.archiveHabit(habitId);
-              if (value == 'delete') await repo.deleteHabit(habitId);
+              if (value == 'delete') {
+                if (!context.mounted) return;
+                final ok = await _confirmDelete(context, habit.name);
+                if (!ok) return;
+                await repo.deleteHabit(habitId);
+              }
               nav.pop();
             },
             itemBuilder: (_) => const [
@@ -50,178 +56,208 @@ class HabitDetailScreen extends ConsumerWidget {
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.fromLTRB(17, 0, 17, 32),
         children: [
           Row(
             children: [
-              Expanded(
-                child: _StatCard(
-                  label: 'Current streak',
-                  value: '${item.streaks.current}',
-                ),
+              HabitIconChip(
+                iconKey: habit.iconKey,
+                color: color,
+                size: 48,
+                filled: true,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 14),
               Expanded(
-                child: _StatCard(
-                  label: 'Best streak',
-                  value: '${item.streaks.best}',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _StatCard(
-                  label: 'Total days',
-                  value: '${item.completedDays.length}',
+                child: Text(
+                  habit.name,
+                  style: const TextStyle(
+                    fontFamily: DC.display,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          Text(
-            'Last $_weeks weeks',
-            style: Theme.of(context).textTheme.titleMedium,
+          const SizedBox(height: 16),
+          WhiteCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: BigStat(
+                        value: '${item.streaks.current}',
+                        label: 'day streak',
+                        size: 56,
+                      ),
+                    ),
+                    Flame(color: deepOf(color), size: 32),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: BigStat(
+                        value: '${item.streaks.best}',
+                        label: 'best streak',
+                        size: 24,
+                      ),
+                    ),
+                    Expanded(
+                      child: BigStat(
+                        value: '${item.completedDays.length}',
+                        label: 'days done',
+                        size: 24,
+                      ),
+                    ),
+                    Expanded(
+                      child: BigStat(
+                        value: '${(item.consistency() * 100).round()}%',
+                        label: 'last 30 days',
+                        size: 24,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
-          _HistoryGrid(item: item, weeks: _weeks),
+          const SizedBox(height: 16),
+          _TodayCard(item: item, repo: repo),
+          const SizedBox(height: 16),
+          WhiteCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const CardTitle(
+                  'Last 15 weeks',
+                  trailing: 'Tap a day to fix it',
+                ),
+                const SizedBox(height: 12),
+                Heatmap(
+                  colorFor: (day) => habitHeatColor(item, day),
+                  onTapDay: (day) {
+                    final done =
+                        (item.dayValues[dayKey(day)] ?? 0) >= item.target;
+                    repo.setValue(habit.id, done ? 0 : item.target, day: day);
+                  },
+                ),
+                const SizedBox(height: 8),
+                HeatLegend(shades: shadesFor(color).sublist(0, 3)),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+
+  Future<bool> _confirmDelete(BuildContext context, String name) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete "$name"?'),
+        content: const Text('This removes the habit and all its history.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    return ok ?? false;
+  }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.label, required this.value});
+class _TodayCard extends StatelessWidget {
+  const _TodayCard({required this.item, required this.repo});
 
-  final String label;
-  final String value;
+  final HabitWithStatus item;
+  final HabitRepository repo;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: DinachariColors.card,
-        borderRadius: BorderRadius.circular(14),
-      ),
+    final habit = item.habit;
+    final color = Color(habit.color);
+
+    if (!item.isCount) {
+      return WhiteCard(
+        child: Row(
+          children: [
+            Expanded(
+              child: CardTitle(
+                'Today',
+                trailing: item.doneToday ? 'Done' : 'Not yet',
+              ),
+            ),
+            const SizedBox(width: 16),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: item.doneToday ? deepOf(color) : tintOf(color),
+                foregroundColor: item.doneToday ? Colors.white : deepOf(color),
+                minimumSize: const Size(140, 44),
+              ),
+              onPressed: () => repo.toggleToday(habit.id),
+              icon: Icon(item.doneToday ? Icons.check : Icons.circle_outlined),
+              label: Text(item.doneToday ? 'Done today' : 'Mark done'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            value,
-            style: const TextStyle(
-              color: DinachariColors.accent,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-            ),
+          CardTitle(
+            'Today',
+            trailing: item.doneToday ? 'Goal reached' : 'Goal ${item.target}',
           ),
-          Text(
-            label,
-            style: const TextStyle(
-              color: DinachariColors.mutedOnCard,
-              fontSize: 12,
-            ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              IconButton.filled(
+                tooltip: 'Remove one',
+                style: IconButton.styleFrom(
+                  backgroundColor: tintOf(color),
+                  foregroundColor: deepOf(color),
+                  disabledBackgroundColor: DC.soft,
+                ),
+                onPressed: item.todayValue > 0
+                    ? () => repo.addToToday(habit.id, -1)
+                    : null,
+                icon: const Icon(Icons.remove),
+              ),
+              Expanded(
+                child: Center(
+                  child: BigStat(
+                    value: '${item.todayValue}',
+                    label: habit.unit.isEmpty ? 'today' : habit.unit,
+                    color: deepOf(color),
+                    trailing: '/ ${item.target}',
+                  ),
+                ),
+              ),
+              IconButton.filled(
+                tooltip: 'Add one',
+                style: IconButton.styleFrom(backgroundColor: deepOf(color)),
+                onPressed: () => repo.addToToday(habit.id, 1),
+                icon: const Icon(Icons.add, color: Colors.white),
+              ),
+            ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// A week-per-column grid, oldest on the left, ending with this week.
-class _HistoryGrid extends ConsumerWidget {
-  const _HistoryGrid({required this.item, required this.weeks});
-
-  final HabitWithStatus item;
-  final int weeks;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final today = dateOnly(DateTime.now());
-    // Monday of the current week.
-    final thisMonday = daysBefore(today, today.weekday - 1);
-    final start = daysBefore(thisMonday, (weeks - 1) * 7);
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        const gap = 4.0;
-        final size = ((constraints.maxWidth - gap * (weeks - 1)) / weeks).clamp(
-          8.0,
-          28.0,
-        );
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            for (var w = 0; w < weeks; w++)
-              Column(
-                children: [
-                  for (var d = 0; d < 7; d++)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: gap),
-                      child: _DayCell(
-                        day: DateTime(
-                          start.year,
-                          start.month,
-                          start.day + w * 7 + d,
-                        ),
-                        today: today,
-                        size: size,
-                        done: item.completedDays.contains(
-                          dayKey(
-                            DateTime(
-                              start.year,
-                              start.month,
-                              start.day + w * 7 + d,
-                            ),
-                          ),
-                        ),
-                        onTap: (day, done) => ref
-                            .read(habitRepositoryProvider)
-                            .setDone(item.habit.id, !done, day: day),
-                      ),
-                    ),
-                ],
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _DayCell extends StatelessWidget {
-  const _DayCell({
-    required this.day,
-    required this.today,
-    required this.size,
-    required this.done,
-    required this.onTap,
-  });
-
-  final DateTime day;
-  final DateTime today;
-  final double size;
-  final bool done;
-  final void Function(DateTime day, bool done) onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final future = day.isAfter(today);
-    return GestureDetector(
-      onTap: future ? null : () => onTap(day, done),
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: future
-              ? Colors.transparent
-              : done
-              ? DinachariColors.accent
-              : const Color(0xFF2A2A2A),
-          borderRadius: BorderRadius.circular(4),
-          border: day == today
-              ? Border.all(color: Colors.white, width: 1.5)
-              : null,
-        ),
       ),
     );
   }

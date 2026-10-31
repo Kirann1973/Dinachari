@@ -8,15 +8,49 @@ import 'database.dart';
 class HabitWithStatus {
   const HabitWithStatus({
     required this.habit,
-    required this.completedDays,
-    required this.doneToday,
-    required this.streaks,
+    required this.dayValues,
+    required this.today,
   });
 
   final Habit habit;
-  final Set<String> completedDays;
-  final bool doneToday;
-  final StreakStats streaks;
+
+  /// Progress per `yyyy-MM-dd` day (only days with progress are present).
+  final Map<String, int> dayValues;
+
+  /// Today's `yyyy-MM-dd` key when this was loaded.
+  final String today;
+
+  int get target => habit.target < 1 ? 1 : habit.target;
+  bool get isCount => habit.kind == HabitKind.count;
+
+  int get todayValue => dayValues[today] ?? 0;
+  bool get doneToday => todayValue >= target;
+
+  /// Days on which the habit was fully done.
+  Set<String> get completedDays => {
+    for (final e in dayValues.entries)
+      if (e.value >= target) e.key,
+  };
+
+  StreakStats get streaks =>
+      computeStreaks(completedDays, today: parseDayKey(today));
+
+  /// The streak ignoring today, so the widget can add today's tick itself.
+  int get streakBeforeToday => computeStreaks(
+    completedDays..remove(today),
+    today: parseDayKey(today),
+  ).current;
+
+  /// Share of the last [days] days (including today) that were done.
+  double consistency({int days = 30}) {
+    final now = parseDayKey(today);
+    final done = completedDays;
+    var hits = 0;
+    for (var i = 0; i < days; i++) {
+      if (done.contains(dayKey(daysBefore(now, i)))) hits++;
+    }
+    return hits / days;
+  }
 }
 
 /// All reads and writes for habits go through here.
@@ -25,7 +59,7 @@ class HabitRepository {
 
   final AppDatabase _db;
 
-  /// Active habits with their completion history, updated live.
+  /// Active habits with their progress history, updated live.
   Stream<List<HabitWithStatus>> watchHabits({DateTime Function()? clock}) {
     final habitsQuery = _db.select(_db.habits)
       ..where((h) => h.archived.equals(false))
@@ -44,27 +78,33 @@ class HabitRepository {
     return query.watch().map((rows) {
       final today = dayKey((clock ?? DateTime.now)());
       final habits = <int, Habit>{};
-      final days = <int, Set<String>>{};
+      final values = <int, Map<String, int>>{};
       for (final row in rows) {
         final habit = row.readTable(_db.habits);
         habits[habit.id] = habit;
-        final days0 = days.putIfAbsent(habit.id, () => <String>{});
-        final completion = row.readTableOrNull(_db.completions);
-        if (completion != null) days0.add(completion.day);
+        final map = values.putIfAbsent(habit.id, () => <String, int>{});
+        final c = row.readTableOrNull(_db.completions);
+        if (c != null) map[c.day] = c.value;
       }
-      return habits.values.map((habit) {
-        final done = days[habit.id] ?? <String>{};
-        return HabitWithStatus(
-          habit: habit,
-          completedDays: done,
-          doneToday: done.contains(today),
-          streaks: computeStreaks(done, today: parseDayKey(today)),
-        );
-      }).toList();
+      return [
+        for (final habit in habits.values)
+          HabitWithStatus(
+            habit: habit,
+            dayValues: values[habit.id] ?? const {},
+            today: today,
+          ),
+      ];
     });
   }
 
-  Future<int> addHabit({required String name, String emoji = '✅'}) async {
+  Future<int> addHabit({
+    required String name,
+    String iconKey = 'check',
+    int color = 0xFFF97316,
+    HabitKind kind = HabitKind.check,
+    int target = 1,
+    String unit = '',
+  }) async {
     final maxOrder = _db.habits.sortOrder.max();
     final row = await (_db.selectOnly(
       _db.habits,
@@ -75,17 +115,33 @@ class HabitRepository {
         .insert(
           HabitsCompanion.insert(
             name: name.trim(),
-            emoji: Value(emoji),
+            iconKey: Value(iconKey),
+            color: Value(color),
+            kind: Value(kind),
+            target: Value(kind == HabitKind.check ? 1 : target.clamp(1, 999)),
+            unit: Value(kind == HabitKind.check ? '' : unit.trim()),
             sortOrder: Value(next),
           ),
         );
   }
 
-  Future<void> updateHabit(int id, {String? name, String? emoji}) {
+  Future<void> updateHabit(
+    int id, {
+    required String name,
+    required String iconKey,
+    required int color,
+    required HabitKind kind,
+    required int target,
+    required String unit,
+  }) {
     return (_db.update(_db.habits)..where((h) => h.id.equals(id))).write(
       HabitsCompanion(
-        name: name == null ? const Value.absent() : Value(name.trim()),
-        emoji: emoji == null ? const Value.absent() : Value(emoji),
+        name: Value(name.trim()),
+        iconKey: Value(iconKey),
+        color: Value(color),
+        kind: Value(kind),
+        target: Value(kind == HabitKind.check ? 1 : target.clamp(1, 999)),
+        unit: Value(kind == HabitKind.check ? '' : unit.trim()),
       ),
     );
   }
@@ -100,28 +156,61 @@ class HabitRepository {
     return (_db.delete(_db.habits)..where((h) => h.id.equals(id))).go();
   }
 
-  /// Marks or unmarks [habitId] as done on [day] (defaults to today).
-  Future<void> setDone(int habitId, bool done, {DateTime? day}) async {
-    final key = dayKey(day ?? DateTime.now());
-    if (done) {
-      await _db
-          .into(_db.completions)
-          .insertOnConflictUpdate(
-            CompletionsCompanion.insert(habitId: habitId, day: key),
-          );
-    } else {
+  /// Sets progress for [habitId] on [day] (defaults to today). 0 clears it.
+  Future<void> setValue(int habitId, int value, {DateTime? day}) =>
+      setValueForKey(habitId, value, dayKey(day ?? DateTime.now()));
+
+  Future<void> setValueForKey(int habitId, int value, String key) async {
+    if (value <= 0) {
       await (_db.delete(
         _db.completions,
       )..where((c) => c.habitId.equals(habitId) & c.day.equals(key))).go();
+    } else {
+      await _db
+          .into(_db.completions)
+          .insertOnConflictUpdate(
+            CompletionsCompanion.insert(
+              habitId: habitId,
+              day: key,
+              value: Value(value),
+            ),
+          );
     }
   }
 
-  Future<void> toggleToday(int habitId) async {
-    final key = dayKey(DateTime.now());
-    final existing =
-        await (_db.select(_db.completions)
-              ..where((c) => c.habitId.equals(habitId) & c.day.equals(key)))
+  /// Marks a day fully done or not done.
+  Future<void> setDone(int habitId, bool done, {DateTime? day}) async {
+    final habit = await (_db.select(
+      _db.habits,
+    )..where((h) => h.id.equals(habitId))).getSingleOrNull();
+    if (habit == null) return;
+    await setValue(habitId, done ? habit.target : 0, day: day);
+  }
+
+  Future<int> _todayValue(int habitId) async {
+    final row =
+        await (_db.select(_db.completions)..where(
+              (c) =>
+                  c.habitId.equals(habitId) &
+                  c.day.equals(dayKey(DateTime.now())),
+            ))
             .getSingleOrNull();
-    await setDone(habitId, existing == null);
+    return row?.value ?? 0;
+  }
+
+  /// Tick or untick today for a done/not-done habit.
+  Future<void> toggleToday(int habitId) async {
+    final habit = await (_db.select(
+      _db.habits,
+    )..where((h) => h.id.equals(habitId))).getSingleOrNull();
+    if (habit == null) return;
+    final value = await _todayValue(habitId);
+    await setValue(habitId, value >= habit.target ? 0 : habit.target);
+  }
+
+  /// Adds [delta] to today's count (never below 0).
+  Future<void> addToToday(int habitId, int delta) async {
+    final value = await _todayValue(habitId);
+    await setValue(habitId, (value + delta).clamp(0, 999));
   }
 }

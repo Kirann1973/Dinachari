@@ -3,14 +3,18 @@
 A simple daily habit tracker (दिनचर्या, "daily routine") for Android, iOS,
 macOS and Windows, with home-screen widgets.
 
-## What works now (v0.1)
+## What works now (v0.2)
 
-- Add, edit, archive and delete habits, each with an emoji
-- Tap a habit to check it off for today
-- Current streak, best streak and total days per habit
-- 12-week history grid; tap a past day to fix a missed check-in
-- Everything is stored on the device (SQLite)
-- Today's summary is shared with home-screen widgets (native widgets come next)
+- Habits with your own icon (36 to choose from, like gym, bath, water,
+  meditate), a color, and a type: tick it off, or count it toward a daily
+  goal (e.g. 8 glasses of water)
+- Today screen in the mockup's style: navy background, white cards, big
+  streak numbers, a "+1" button for counted habits, and a 15-week heatmap
+- Habit page with current and best streak, days done, last-30-days
+  consistency, and a heatmap where you can tap a past day to fix it
+- Android home-screen widget: tap a habit to tick it (or +1), even with the
+  app closed; the app picks up widget taps when it opens
+- Everything is stored on the device (SQLite); upgrading keeps your habits
 
 ## Run it
 

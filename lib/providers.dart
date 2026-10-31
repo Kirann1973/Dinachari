@@ -15,12 +15,13 @@ final habitRepositoryProvider = Provider<HabitRepository>(
   (ref) => HabitRepository(ref.watch(databaseProvider)),
 );
 
-/// Active habits with today's status. Every change is also pushed to the
-/// home-screen widget.
-final habitsProvider = StreamProvider<List<HabitWithStatus>>((ref) {
+/// Active habits with today's status. Ticks made on the home-screen widget
+/// are applied first, and every change is pushed back to the widget.
+final habitsProvider = StreamProvider<List<HabitWithStatus>>((ref) async* {
   final repo = ref.watch(habitRepositoryProvider);
-  return repo.watchHabits().map((habits) {
+  await WidgetSync.applyPending(repo);
+  await for (final habits in repo.watchHabits()) {
     WidgetSync.push(habits);
-    return habits;
-  });
+    yield habits;
+  }
 });
