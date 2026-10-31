@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'data/database.dart';
 import 'data/habit_repository.dart';
+import 'services/reminders.dart';
 import 'services/widget_sync.dart';
 
 /// The app database. Overridden with an in-memory database in tests.
@@ -24,4 +25,23 @@ final habitsProvider = StreamProvider<List<HabitWithStatus>>((ref) async* {
     WidgetSync.push(habits);
     yield habits;
   }
+});
+
+/// Archived habits, for the Archived section.
+final archivedHabitsProvider = StreamProvider<List<HabitWithStatus>>(
+  (ref) => ref.watch(habitRepositoryProvider).watchHabits(archived: true),
+);
+
+/// Every reminder with its habit.
+final allRemindersProvider = StreamProvider<List<(Habit, Reminder)>>(
+  (ref) => ref.watch(habitRepositoryProvider).watchAllReminders(),
+);
+
+/// Rebooks notifications whenever habits or reminders change. Watched by the
+/// app shell so it stays alive while the app runs.
+final reminderSchedulerProvider = Provider<void>((ref) {
+  final habits = ref.watch(habitsProvider).value;
+  final reminders = ref.watch(allRemindersProvider).value;
+  if (habits == null || reminders == null) return;
+  ReminderService.instance.reschedule(habits, reminders);
 });

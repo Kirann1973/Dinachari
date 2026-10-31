@@ -1,109 +1,101 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import '../app.dart';
 import '../data/habit_repository.dart';
-import '../domain/day.dart';
 import '../domain/habit_style.dart';
 import '../providers.dart';
-import '../services/widget_sync.dart';
+import 'app_shell.dart';
 import 'common.dart';
 import 'habit_detail_screen.dart';
 import 'habit_editor.dart';
+import 'insight_cards.dart';
 
-/// Home screen: today's habits as tiles, plus a heatmap of all habits.
-class TodayScreen extends ConsumerStatefulWidget {
-  const TodayScreen({super.key});
-
-  @override
-  ConsumerState<TodayScreen> createState() => _TodayScreenState();
-}
-
-class _TodayScreenState extends ConsumerState<TodayScreen>
-    with WidgetsBindingObserver {
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
+/// Today's habits as tiles, then this week's graph, the heatmap and the plant.
+class TodayView extends ConsumerWidget {
+  const TodayView({super.key});
 
   @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      // Pick up ticks made on the widget, and roll "today" over at midnight.
-      WidgetSync.applyPending(ref.read(habitRepositoryProvider))
-          .then((_) => ref.invalidate(habitsProvider));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final habits = ref.watch(habitsProvider);
-
-    return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => openHabitEditor(context),
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'New habit',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
-      body: SafeArea(
-        child: habits.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, _) => Center(child: Text('Something went wrong\n$e')),
-          data: (list) => ListView(
-            padding: const EdgeInsets.fromLTRB(17, 16, 17, 96),
-            children: [
-              const _Header(),
+    return habits.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Something went wrong\n$e')),
+      data: (list) {
+        final due = list.where((h) => h.dueToday || h.todayValue > 0).toList();
+        final rest = list.where((h) => !due.contains(h)).toList();
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(17, 4, 17, 96),
+          children: [
+            if (list.isEmpty)
+              const _EmptyCard()
+            else ...[
+              _SummaryCard(habits: due),
               const SizedBox(height: 16),
-              if (list.isEmpty)
-                const _EmptyCard()
-              else ...[
-                _SummaryCard(habits: list),
+              _TileGrid(habits: due),
+              if (rest.isNotEmpty) ...[
+                _NotDueCard(habits: rest),
                 const SizedBox(height: 16),
-                _TileGrid(habits: list),
-                const SizedBox(height: 16),
-                _AllHabitsHeatmap(habits: list),
               ],
+              WeekChartCard(habits: list, start: weekStart(DateTime.now())),
+              const SizedBox(height: 16),
+              AllHabitsHeatmapCard(habits: list),
+              const SizedBox(height: 16),
+              PlantCard(
+                habits: list,
+                plantHeight: 120,
+                onTap: () => ShellScope.of(context)?.go(Section.plant),
+              ),
             ],
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _Header extends StatelessWidget {
-  const _Header();
+/// Habits that have a day off today.
+class _NotDueCard extends StatelessWidget {
+  const _NotDueCard({required this.habits});
+
+  final List<HabitWithStatus> habits;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Dinachari',
-          style: TextStyle(
-            fontFamily: DC.display,
-            fontSize: 28,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+    return WhiteCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CardTitle('Day off today'),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final h in habits)
+                ActionChip(
+                  backgroundColor: DC.soft,
+                  side: BorderSide.none,
+                  shape: const StadiumBorder(),
+                  avatar: HabitIconChip(
+                    iconKey: h.habit.iconKey,
+                    color: Color(h.habit.color),
+                    size: 24,
+                  ),
+                  label: Text(
+                    '${h.habit.name} · ${h.schedule.label}',
+                    style: const TextStyle(color: DC.ink, fontSize: 13),
+                  ),
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => HabitDetailScreen(habitId: h.habit.id),
+                    ),
+                  ),
+                ),
+            ],
           ),
-        ),
-        Text(
-          DateFormat('EEEE, d MMMM').format(DateTime.now()),
-          style: const TextStyle(fontSize: 14, color: DC.onDark),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -116,6 +108,11 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final done = habits.where((h) => h.doneToday).length;
+    if (habits.isEmpty) {
+      return const WhiteCard(
+        child: CardTitle('Today', trailing: 'Nothing due, enjoy the day off'),
+      );
+    }
     return WhiteCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,49 +349,6 @@ class _PillButton extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _AllHabitsHeatmap extends StatelessWidget {
-  const _AllHabitsHeatmap({required this.habits});
-
-  final List<HabitWithStatus> habits;
-
-  @override
-  Widget build(BuildContext context) {
-    double shareDone(String day) {
-      if (habits.isEmpty) return 0;
-      final done = habits.where((h) => (h.dayValues[day] ?? 0) >= h.target);
-      return done.length / habits.length;
-    }
-
-    final today = dateOnly(DateTime.now());
-    var sum = 0.0;
-    for (var i = 0; i < 30; i++) {
-      sum += shareDone(dayKey(daysBefore(today, i)));
-    }
-    final consistency = (sum / 30 * 100).round();
-
-    return WhiteCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          CardTitle('Last 15 weeks', trailing: '$consistency% consistency'),
-          const SizedBox(height: 12),
-          Heatmap(
-            colorFor: (day) {
-              final s = shareDone(day);
-              if (s <= 0) return DC.heat[0];
-              if (s < 0.5) return DC.heat[1];
-              if (s < 1) return DC.heat[2];
-              return DC.heat[3];
-            },
-          ),
-          const SizedBox(height: 8),
-          const HeatLegend(),
-        ],
       ),
     );
   }

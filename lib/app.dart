@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'ui/today_screen.dart';
+import 'ui/app_shell.dart';
 
 /// Colors from the approved mockup: white cards on a deep navy background,
 /// orange accent, Space Grotesk numbers and Inter text.
@@ -60,7 +60,7 @@ class DinachariApp extends StatelessWidget {
           foregroundColor: Colors.white,
         ),
       ),
-      home: const TodayScreen(),
+      home: const AppShell(),
     );
   }
 }

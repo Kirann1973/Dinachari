@@ -23,6 +23,8 @@ HabitWithStatus _habit(
     unit: kind == HabitKind.count ? 'glasses' : '',
     sortOrder: id,
     archived: false,
+    days: 127,
+    sound: 'default',
     createdAt: DateTime(2026),
   ),
   dayValues: values,

@@ -7,7 +7,9 @@ import 'package:home_widget/home_widget.dart';
 
 import '../data/habit_repository.dart';
 import '../domain/day.dart';
+import '../domain/plant.dart';
 import '../ui/habit_look_view.dart';
+import '../ui/widget_images.dart';
 
 /// Keeps the home-screen widgets and the app in step.
 ///
@@ -48,23 +50,26 @@ class WidgetSync {
     return h;
   }
 
-  /// Builds the JSON payload the native widgets render.
+  /// Builds the JSON payload the native widgets render: habits due today
+  /// (or already ticked today), plus the keys of the pictures drawn below them.
   static String buildPayload(List<HabitWithStatus> habits, {DateTime? now}) {
     return jsonEncode({
       'day': dayKey(now ?? DateTime.now()),
+      'images': [for (final i in WidgetImage.values) i.key],
       'habits': [
         for (final h in habits)
-          {
-            'id': h.habit.id,
-            'name': h.habit.name,
-            'icon': iconImageKey(h.habit.iconKey, h.habit.color),
-            'color': h.habit.color,
-            'kind': h.isCount ? 'count' : 'check',
-            'target': h.target,
-            'unit': h.habit.unit,
-            'value': h.todayValue,
-            'streakBefore': h.streakBeforeToday,
-          },
+          if (h.dueToday || h.todayValue > 0)
+            {
+              'id': h.habit.id,
+              'name': h.habit.name,
+              'icon': iconImageKey(h.habit.iconKey, h.habit.color),
+              'color': h.habit.color,
+              'kind': h.isCount ? 'count' : 'check',
+              'target': h.target,
+              'unit': h.habit.unit,
+              'value': h.todayValue,
+              'streakBefore': h.streakBeforeToday,
+            },
       ],
     });
   }
@@ -94,10 +99,33 @@ class WidgetSync {
     }
   }
 
+  static String? _imagesSignature;
+
+  /// Draws the week graph, heatmap and plant for the widget, when they changed.
+  static Future<void> _renderImages(List<HabitWithStatus> habits) async {
+    final today = dateOnly(DateTime.now());
+    final signature = [
+      dayKey(today),
+      PlantState.of(habits).growthDays,
+      for (var i = 0; i < 105; i++) dayScore(habits, daysBefore(today, i)),
+    ].join(',');
+    if (signature == _imagesSignature) return;
+    for (final image in WidgetImage.values) {
+      await HomeWidget.renderFlutterWidget(
+        image.build(habits),
+        key: image.key,
+        logicalSize: Size(widgetImageWidth, image.height),
+        pixelRatio: 2,
+      );
+    }
+    _imagesSignature = signature;
+  }
+
   static Future<void> push(List<HabitWithStatus> habits) async {
     if (!_supported) return;
     try {
       await _renderIcons(habits);
+      if (Platform.isAndroid) await _renderImages(habits);
       await HomeWidget.saveWidgetData<String>(dataKey, buildPayload(habits));
       await HomeWidget.updateWidget(
         qualifiedAndroidName: androidWidget,

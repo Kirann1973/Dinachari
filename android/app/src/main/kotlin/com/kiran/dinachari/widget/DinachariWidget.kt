@@ -16,13 +16,19 @@ import androidx.glance.action.actionParametersOf
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.GlanceAppWidgetManager
+import androidx.glance.appwidget.SizeMode
+import androidx.glance.appwidget.lazy.LazyColumn
+import androidx.glance.appwidget.lazy.item
+import androidx.glance.appwidget.lazy.items
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
 import androidx.glance.appwidget.state.updateAppWidgetState
 import androidx.glance.background
+import androidx.glance.LocalSize
 import androidx.glance.currentState
+import androidx.glance.layout.ContentScale
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
 import androidx.glance.layout.Column
@@ -142,9 +148,22 @@ internal object WidgetData {
         }
     }
 
-    fun save(habits: List<WidgetHabit>, today: String = today()): String =
+    /** Keys of the pictures (week graph, heatmap, plant) shown under the habits. */
+    fun imageKeys(json: String?): List<String> = try {
+        val array = JSONObject(json ?: "{}").optJSONArray("images") ?: JSONArray()
+        (0 until array.length()).map { array.getString(it) }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    fun save(
+        habits: List<WidgetHabit>,
+        today: String = today(),
+        images: List<String> = emptyList(),
+    ): String =
         JSONObject()
             .put("day", today)
+            .put("images", JSONArray().apply { images.forEach { put(it) } })
             .put("habits", JSONArray().apply { habits.forEach { put(it.toJson()) } })
             .toString()
 
@@ -174,14 +193,27 @@ class DinachariWidget : GlanceAppWidget() {
 
     override val stateDefinition = HomeWidgetGlanceStateDefinition()
 
+    /** Exact size, so the pictures can be scaled to the widget's width. */
+    override val sizeMode = SizeMode.Exact
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         provideContent {
             val prefs = currentState<HomeWidgetGlanceState>().preferences
-            val habits = WidgetData.load(prefs.getString(WidgetKeys.DATA, null))
+            val json = prefs.getString(WidgetKeys.DATA, null)
+            val habits = WidgetData.load(json)
             val icons = habits.associate { h ->
                 h.icon to prefs.getString(h.icon, null)?.let { BitmapFactory.decodeFile(it) }
             }
-            Content(context, habits, icons)
+            // Pictures from an earlier day would be stale, so only show today's.
+            val fresh = try {
+                JSONObject(json ?: "{}").optString("day") == WidgetData.today()
+            } catch (e: Exception) {
+                false
+            }
+            val images = if (!fresh) emptyList() else WidgetData.imageKeys(json).mapNotNull { key ->
+                prefs.getString(key, null)?.let { BitmapFactory.decodeFile(it) }
+            }
+            Content(context, habits, icons, images)
         }
     }
 
@@ -190,7 +222,9 @@ class DinachariWidget : GlanceAppWidget() {
         context: Context,
         habits: List<WidgetHabit>,
         icons: Map<String, Bitmap?>,
+        images: List<Bitmap>,
     ) {
+        val width = LocalSize.current.width - 28.dp
         Column(
             modifier = GlanceModifier
                 .fillMaxSize()
@@ -220,42 +254,50 @@ class DinachariWidget : GlanceAppWidget() {
                 )
             }
 
-            if (habits.isEmpty()) {
-                Box(
-                    modifier = GlanceModifier
-                        .fillMaxSize()
-                        .clickable(actionStartActivity<MainActivity>(context)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "Open Dinachari to add habits",
-                        style = TextStyle(color = ColorProvider(WidgetColors.muted), fontSize = 13.sp),
-                    )
-                }
-                return@Column
-            }
-
-            val shown = habits.take(MAX_SHOWN)
-            shown.chunked(2).forEachIndexed { index, pair ->
-                if (index > 0) Spacer(GlanceModifier.height(8.dp))
-                Row(modifier = GlanceModifier.fillMaxWidth()) {
-                    Pill(pair[0], icons[pair[0].icon], GlanceModifier.defaultWeight())
-                    Spacer(GlanceModifier.width(8.dp))
-                    if (pair.size > 1) {
-                        Pill(pair[1], icons[pair[1].icon], GlanceModifier.defaultWeight())
-                    } else {
-                        Spacer(GlanceModifier.defaultWeight())
+            // Everything below the title scrolls: habits, then the week graph,
+            // the heatmap and the plant.
+            LazyColumn(modifier = GlanceModifier.fillMaxSize()) {
+                if (habits.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = GlanceModifier
+                                .fillMaxWidth()
+                                .padding(vertical = 16.dp)
+                                .clickable(actionStartActivity<MainActivity>(context)),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "Nothing due today. Open Dinachari to add habits.",
+                                style = TextStyle(color = ColorProvider(WidgetColors.muted), fontSize = 13.sp),
+                            )
+                        }
                     }
                 }
-            }
-            if (habits.size > MAX_SHOWN) {
-                Text(
-                    text = "+${habits.size - MAX_SHOWN} more in the app",
-                    style = TextStyle(color = ColorProvider(WidgetColors.muted), fontSize = 12.sp),
-                    modifier = GlanceModifier
-                        .padding(top = 8.dp, start = 2.dp)
-                        .clickable(actionStartActivity<MainActivity>(context)),
-                )
+                items(habits.chunked(2)) { pair ->
+                    Column(modifier = GlanceModifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        Row(modifier = GlanceModifier.fillMaxWidth()) {
+                            Pill(pair[0], icons[pair[0].icon], GlanceModifier.defaultWeight())
+                            Spacer(GlanceModifier.width(8.dp))
+                            if (pair.size > 1) {
+                                Pill(pair[1], icons[pair[1].icon], GlanceModifier.defaultWeight())
+                            } else {
+                                Spacer(GlanceModifier.defaultWeight())
+                            }
+                        }
+                    }
+                }
+                items(images) { bitmap ->
+                    Image(
+                        provider = ImageProvider(bitmap),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = GlanceModifier
+                            .fillMaxWidth()
+                            .height(width * bitmap.height.toFloat() / bitmap.width.toFloat())
+                            .padding(top = 4.dp)
+                            .clickable(actionStartActivity<MainActivity>(context)),
+                    )
+                }
             }
         }
     }
@@ -316,10 +358,6 @@ class DinachariWidget : GlanceAppWidget() {
             }
         }
     }
-
-    companion object {
-        private const val MAX_SHOWN = 8
-    }
 }
 
 /**
@@ -349,7 +387,10 @@ class ToggleHabitAction : ActionCallback {
         pending.put(JSONObject().put("id", id).put("day", today).put("value", value))
 
         prefs.edit()
-            .putString(WidgetKeys.DATA, WidgetData.save(updated, today))
+            .putString(
+                WidgetKeys.DATA,
+                WidgetData.save(updated, today, WidgetData.imageKeys(prefs.getString(WidgetKeys.DATA, null))),
+            )
             .putString(WidgetKeys.PENDING, pending.toString())
             .commit()
 

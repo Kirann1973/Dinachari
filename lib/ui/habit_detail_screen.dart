@@ -39,7 +39,21 @@ class HabitDetailScreen extends ConsumerWidget {
             tooltip: 'More',
             onSelected: (value) async {
               final nav = Navigator.of(context);
-              if (value == 'archive') await repo.archiveHabit(habitId);
+              final messenger = ScaffoldMessenger.of(context);
+              if (value == 'archive') {
+                await repo.archiveHabit(habitId);
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      '${habit.name} archived. Find it under Archived in the menu.',
+                    ),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () => repo.restoreHabit(habitId),
+                    ),
+                  ),
+                );
+              }
               if (value == 'delete') {
                 if (!context.mounted) return;
                 final ok = await _confirmDelete(context, habit.name);

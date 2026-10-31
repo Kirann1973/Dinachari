@@ -4,39 +4,43 @@ import 'day.dart';
 class StreakStats {
   const StreakStats({required this.current, required this.best});
 
-  /// Consecutive completed days ending today. If today is not done yet, the
-  /// streak ending yesterday still counts, so a streak doesn't look broken
-  /// first thing in the morning.
+  /// Done days in a row up to today. Days the habit isn't due are skipped
+  /// (they don't break a streak), and today only breaks it once it's over.
   final int current;
 
-  /// Longest run of consecutive completed days ever.
+  /// Longest such run ever.
   final int best;
 }
 
-/// Computes streaks from a set of completed `yyyy-MM-dd` day keys.
-StreakStats computeStreaks(Set<String> completedDays, {DateTime? today}) {
+/// Computes streaks from completed `yyyy-MM-dd` day keys.
+///
+/// [isDue] says whether the habit is scheduled on a day; by default every day.
+StreakStats computeStreaks(
+  Set<String> completedDays, {
+  DateTime? today,
+  bool Function(DateTime day)? isDue,
+}) {
+  if (completedDays.isEmpty) return const StreakStats(current: 0, best: 0);
   final now = dateOnly(today ?? DateTime.now());
+  final due = isDue ?? (_) => true;
 
-  var current = 0;
-  var cursor = completedDays.contains(dayKey(now)) ? now : daysBefore(now, 1);
-  while (completedDays.contains(dayKey(cursor))) {
-    current++;
-    cursor = daysBefore(cursor, 1);
-  }
-
-  final sorted = completedDays.map(parseDayKey).toList()..sort();
-  var best = 0;
+  final earliest = completedDays
+      .map(parseDayKey)
+      .reduce((a, b) => a.isBefore(b) ? a : b);
   var run = 0;
-  DateTime? prev;
-  for (final day in sorted) {
-    if (prev != null && dayKey(daysBefore(day, 1)) == dayKey(prev)) {
+  var best = 0;
+  // Walk forward one calendar day at a time (DST safe).
+  for (
+    var d = earliest;
+    !d.isAfter(now);
+    d = DateTime(d.year, d.month, d.day + 1)
+  ) {
+    if (completedDays.contains(dayKey(d))) {
       run++;
-    } else {
-      run = 1;
+      if (run > best) best = run;
+    } else if (due(d) && d != now) {
+      run = 0;
     }
-    if (run > best) best = run;
-    prev = day;
   }
-
-  return StreakStats(current: current, best: best < current ? current : best);
+  return StreakStats(current: run, best: best);
 }

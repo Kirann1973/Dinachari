@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,8 +6,12 @@ import '../app.dart';
 import '../data/database.dart';
 import '../domain/habit_look.dart';
 import '../domain/habit_style.dart';
+import '../domain/reminder_plan.dart';
+import '../domain/schedule.dart';
+import '../services/reminders.dart';
 import '../providers.dart';
 import 'common.dart';
+import 'editor_sections.dart';
 import 'look_picker.dart';
 
 /// Opens the full-screen editor to add a habit, or edit [existing].
@@ -35,6 +40,9 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
   late int _color = widget.existing?.color ?? habitColors.first.toARGB32();
   late HabitKind _kind = widget.existing?.kind ?? HabitKind.check;
   late int _target = widget.existing?.target ?? 8;
+  late int _days = widget.existing?.days ?? Schedule.everyDay.mask;
+  late String _sound = widget.existing?.sound ?? 'default';
+  List<ReminderRule> _reminders = [];
 
   /// Until the user picks an icon, guess it from the name.
   late bool _iconPicked = widget.existing != null;
@@ -43,6 +51,24 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
   void initState() {
     super.initState();
     if (_kind == HabitKind.check) _target = 8;
+    final existing = widget.existing;
+    if (existing != null) {
+      ref.read(habitRepositoryProvider).watchReminders(existing.id).first.then((
+        list,
+      ) {
+        if (!mounted) return;
+        setState(() {
+          _reminders = [
+            for (final r in list)
+              ReminderRule(
+                minute: r.minute,
+                every: r.every,
+                endMinute: r.endMinute,
+              ),
+          ];
+        });
+      });
+    }
     _name.addListener(() {
       setState(() {
         if (!_iconPicked) _iconKey = suggestLook(_name.text);
@@ -57,22 +83,26 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
     super.dispose();
   }
 
-  bool get _canSave => _name.text.trim().isNotEmpty;
+  bool get _canSave => _name.text.trim().isNotEmpty && _days != 0;
 
   Future<void> _save() async {
     if (!_canSave) return;
     final repo = ref.read(habitRepositoryProvider);
     final existing = widget.existing;
+    final int id;
     if (existing == null) {
-      await repo.addHabit(
+      id = await repo.addHabit(
         name: _name.text,
         iconKey: _iconKey,
         color: _color,
         kind: _kind,
         target: _target,
         unit: _unit.text,
+        days: _days,
+        sound: _sound,
       );
     } else {
+      id = existing.id;
       await repo.updateHabit(
         existing.id,
         name: _name.text,
@@ -81,7 +111,21 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
         kind: _kind,
         target: _target,
         unit: _unit.text,
+        days: _days,
+        sound: _sound,
       );
+    }
+    await repo.setReminders(id, [
+      for (final r in _reminders)
+        RemindersCompanion.insert(
+          habitId: id,
+          minute: r.minute,
+          every: Value(r.every),
+          endMinute: Value(r.endMinute),
+        ),
+    ]);
+    if (_reminders.isNotEmpty) {
+      await ReminderService.instance.requestPermission();
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -229,6 +273,47 @@ class _HabitEditorScreenState extends ConsumerState<HabitEditorScreen> {
                     _iconKey = look;
                     _iconPicked = true;
                   }),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          WhiteCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                SectionLabel(
+                  'Repeat',
+                  trailing: Text(
+                    Schedule(_days).label,
+                    style: const TextStyle(color: DC.muted, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ScheduleEditor(
+                  mask: _days,
+                  onChanged: (m) => setState(() => _days = m),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          WhiteCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SectionLabel('Reminders'),
+                const SizedBox(height: 12),
+                RemindersEditor(
+                  rules: _reminders,
+                  onChanged: (r) => setState(() => _reminders = r),
+                ),
+                const SizedBox(height: 16),
+                const SectionLabel('Reminder sound'),
+                const SizedBox(height: 12),
+                SoundEditor(
+                  sound: _sound,
+                  onChanged: (s) => setState(() => _sound = s),
                 ),
               ],
             ),

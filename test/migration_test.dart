@@ -35,6 +35,13 @@ void main() {
     expect(h.habit.kind, HabitKind.check);
     expect(h.target, 1);
     expect(h.completedDays, {'2026-10-30'});
+    // Version 3 added repeat days, sounds and reminders.
+    expect(h.habit.days, 127);
+    expect(h.habit.sound, 'default');
+    await repo.setReminders(h.habit.id, [
+      RemindersCompanion.insert(habitId: h.habit.id, minute: 480),
+    ]);
+    expect((await repo.watchReminders(h.habit.id).first).single.minute, 480);
     await db.close();
   });
 }

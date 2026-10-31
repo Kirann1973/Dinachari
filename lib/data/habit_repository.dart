@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../domain/day.dart';
+import '../domain/schedule.dart';
 import '../domain/streaks.dart';
 import 'database.dart';
 
@@ -32,24 +33,36 @@ class HabitWithStatus {
       if (e.value >= target) e.key,
   };
 
+  Schedule get schedule => Schedule(habit.days);
+  bool dueOn(DateTime day) => schedule.on(day);
+  bool get dueToday => dueOn(parseDayKey(today));
+
+  bool doneOn(String day) => (dayValues[day] ?? 0) >= target;
+
   StreakStats get streaks =>
-      computeStreaks(completedDays, today: parseDayKey(today));
+      computeStreaks(completedDays, today: parseDayKey(today), isDue: dueOn);
 
   /// The streak ignoring today, so the widget can add today's tick itself.
   int get streakBeforeToday => computeStreaks(
     completedDays..remove(today),
     today: parseDayKey(today),
+    isDue: dueOn,
   ).current;
 
-  /// Share of the last [days] days (including today) that were done.
+  /// Share of due days in the last [days] days (including today) that were
+  /// done. Today only counts once it's done.
   double consistency({int days = 30}) {
     final now = parseDayKey(today);
-    final done = completedDays;
+    var due = 0;
     var hits = 0;
     for (var i = 0; i < days; i++) {
-      if (done.contains(dayKey(daysBefore(now, i)))) hits++;
+      final d = daysBefore(now, i);
+      final done = doneOn(dayKey(d));
+      if (done) hits++;
+      if (dueOn(d) && (i > 0 || done)) due++;
     }
-    return hits / days;
+    if (due == 0) return 0;
+    return (hits / due).clamp(0, 1).toDouble();
   }
 }
 
@@ -60,9 +73,12 @@ class HabitRepository {
   final AppDatabase _db;
 
   /// Active habits with their progress history, updated live.
-  Stream<List<HabitWithStatus>> watchHabits({DateTime Function()? clock}) {
+  Stream<List<HabitWithStatus>> watchHabits({
+    DateTime Function()? clock,
+    bool archived = false,
+  }) {
     final habitsQuery = _db.select(_db.habits)
-      ..where((h) => h.archived.equals(false))
+      ..where((h) => h.archived.equals(archived))
       ..orderBy([
         (h) => OrderingTerm.asc(h.sortOrder),
         (h) => OrderingTerm.asc(h.id),
@@ -104,6 +120,8 @@ class HabitRepository {
     HabitKind kind = HabitKind.check,
     int target = 1,
     String unit = '',
+    int days = 127,
+    String sound = 'default',
   }) async {
     final maxOrder = _db.habits.sortOrder.max();
     final row = await (_db.selectOnly(
@@ -120,6 +138,8 @@ class HabitRepository {
             kind: Value(kind),
             target: Value(kind == HabitKind.check ? 1 : target.clamp(1, 999)),
             unit: Value(kind == HabitKind.check ? '' : unit.trim()),
+            days: Value(days),
+            sound: Value(sound),
             sortOrder: Value(next),
           ),
         );
@@ -133,6 +153,8 @@ class HabitRepository {
     required HabitKind kind,
     required int target,
     required String unit,
+    required int days,
+    required String sound,
   }) {
     return (_db.update(_db.habits)..where((h) => h.id.equals(id))).write(
       HabitsCompanion(
@@ -142,13 +164,54 @@ class HabitRepository {
         kind: Value(kind),
         target: Value(kind == HabitKind.check ? 1 : target.clamp(1, 999)),
         unit: Value(kind == HabitKind.check ? '' : unit.trim()),
+        days: Value(days),
+        sound: Value(sound),
       ),
     );
   }
 
-  Future<void> archiveHabit(int id) {
+  Future<void> archiveHabit(int id, {bool archived = true}) {
     return (_db.update(_db.habits)..where((h) => h.id.equals(id))).write(
-      const HabitsCompanion(archived: Value(true)),
+      HabitsCompanion(archived: Value(archived)),
+    );
+  }
+
+  Future<void> restoreHabit(int id) => archiveHabit(id, archived: false);
+
+  /// Reminders of one habit, earliest first.
+  Stream<List<Reminder>> watchReminders(int habitId) {
+    return (_db.select(_db.reminders)
+          ..where((r) => r.habitId.equals(habitId))
+          ..orderBy([(r) => OrderingTerm.asc(r.minute)]))
+        .watch();
+  }
+
+  /// Replaces all reminders of [habitId].
+  Future<void> setReminders(int habitId, List<RemindersCompanion> list) {
+    return _db.transaction(() async {
+      await (_db.delete(
+        _db.reminders,
+      )..where((r) => r.habitId.equals(habitId))).go();
+      for (final r in list) {
+        await _db
+            .into(_db.reminders)
+            .insert(
+              r.copyWith(id: const Value.absent(), habitId: Value(habitId)),
+            );
+      }
+    });
+  }
+
+  /// Every reminder of an active habit, with its habit, for scheduling.
+  Stream<List<(Habit, Reminder)>> watchAllReminders() {
+    final query = _db.select(_db.reminders).join([
+      innerJoin(_db.habits, _db.habits.id.equalsExp(_db.reminders.habitId)),
+    ])..where(_db.habits.archived.equals(false));
+    return query.watch().map(
+      (rows) => [
+        for (final row in rows)
+          (row.readTable(_db.habits), row.readTable(_db.reminders)),
+      ],
     );
   }
 

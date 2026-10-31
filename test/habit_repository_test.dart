@@ -78,8 +78,12 @@ void main() {
       kind: HabitKind.check,
       target: 5,
       unit: 'ignored',
+      days: 31,
+      sound: 'raw:chime',
     );
     final h = (await repo.watchHabits().first).single.habit;
+    expect(h.days, 31);
+    expect(h.sound, 'raw:chime');
     expect(h.iconKey, 'bath');
     expect(h.color, 0xFF1D4ED8);
     expect(h.target, 1, reason: 'tick habits always have a goal of 1');

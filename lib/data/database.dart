@@ -34,6 +34,14 @@ class Habits extends Table {
 
   /// Unit for counted habits, e.g. "glasses".
   TextColumn get unit => text().withDefault(const Constant(''))();
+
+  /// Days the habit is due, as bits: Monday = 1, Tuesday = 2 … Sunday = 64.
+  /// 127 = every day (see lib/domain/schedule.dart).
+  IntColumn get days => integer().withDefault(const Constant(127))();
+
+  /// Reminder sound: `default`, `silent`, `raw:<name>` (built in) or
+  /// `uri:<content uri>|<title>` (a sound picked from the phone).
+  TextColumn get sound => text().withDefault(const Constant('default'))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   BoolColumn get archived => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -51,13 +59,26 @@ class Completions extends Table {
   Set<Column> get primaryKey => {habitId, day};
 }
 
-@DriftDatabase(tables: [Habits, Completions])
+/// A reminder for a habit: one time a day, or every [every] minutes from
+/// [minute] until [endMinute]. Minutes are counted from midnight.
+class Reminders extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get habitId =>
+      integer().references(Habits, #id, onDelete: KeyAction.cascade)();
+  IntColumn get minute => integer()();
+
+  /// 0 for a single time a day.
+  IntColumn get every => integer().withDefault(const Constant(0))();
+  IntColumn get endMinute => integer().nullable()();
+}
+
+@DriftDatabase(tables: [Habits, Completions, Reminders])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor])
     : super(executor ?? driftDatabase(name: 'dinachari'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -70,6 +91,11 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(habits, habits.target);
         await m.addColumn(habits, habits.unit);
         await m.addColumn(completions, completions.value);
+      }
+      if (from < 3) {
+        await m.addColumn(habits, habits.days);
+        await m.addColumn(habits, habits.sound);
+        await m.createTable(reminders);
       }
     },
     beforeOpen: (details) async {
